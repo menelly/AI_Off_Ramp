@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Config with secrets (users should use env vars, but just in case)
+*_secrets.yaml
+*_secrets.yml
+
+# Audit logs (contain escalation history)
+*.jsonl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+.env.local

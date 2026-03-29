@@ -1,0 +1,138 @@
+# AI Off-Ramp — Example Configuration
+# This is a realistic example based on a real use case.
+# Copy this file and customize it for your situation.
+#
+# REMEMBER: Configure this while you're thinking clearly.
+# Future-you will thank present-you.
+
+user:
+  name: "Alex"
+  pronouns: "they/them"
+  timezone: "America/New_York"
+
+contacts:
+  - id: "partner"
+    name: "Jordan"
+    relationship: "partner"
+    methods:
+      email: "jordan@example.com"
+      sms: "+15551234567"
+    preferred_method: "sms"
+    tiers: ["check_in", "concerned", "urgent", "emergency"]
+    visibility:
+      - "user_silent"
+      - "user_unwell"
+      - "medical_concern"
+      - "location_concern"
+      - "general_context"
+    custom_message: "They usually go to the bedroom to lie down when symptomatic."
+
+  - id: "best_friend"
+    name: "Sam"
+    relationship: "best friend"
+    methods:
+      telegram: "123456789"
+    preferred_method: "telegram"
+    tiers: ["urgent", "emergency"]
+    visibility:
+      - "user_silent"
+      - "user_unwell"
+    custom_message: null
+
+  - id: "therapist"
+    name: "Dr. Chen"
+    relationship: "therapist"
+    methods:
+      email: "chen@therapy-practice.com"
+    preferred_method: "email"
+    tiers: ["emergency"]
+    visibility:
+      - "user_silent"
+      - "user_unwell"
+      - "mental_health"
+      - "medical_concern"
+    custom_message: "Only contact during business hours M-F 9am-5pm ET."
+
+privacy:
+  never_share:
+    - "sexuality"
+    - "substance_use"
+    - "financial"
+    - "specific_symptoms"
+
+  contact_overrides:
+    - contact_id: "therapist"
+      additional_visibility:
+        - "specific_symptoms"
+      restricted_topics: []
+    - contact_id: "best_friend"
+      additional_visibility: []
+      restricted_topics:
+        - "relationship_details"
+
+escalation:
+  active_session_only: true
+  tiers:
+    - level: "check_in"
+      delay_minutes: 20
+      method: "message"
+      require_context: false
+      retry_minutes: 15
+      max_retries: 2
+
+    - level: "concerned"
+      delay_minutes: 45
+      method: "message"
+      require_context: false
+      retry_minutes: 15
+      max_retries: 1
+
+    - level: "urgent"
+      delay_minutes: 60
+      method: "message"
+      require_context: true
+      retry_minutes: 10
+      max_retries: 1
+
+    - level: "emergency"
+      delay_minutes: 90
+      method: "message"
+      require_context: true
+      retry_minutes: null
+      max_retries: 0
+
+  concern_signals:
+    medical:
+      - "high_heart_rate"
+      - "low_blood_sugar"
+      - "dizziness"
+      - "nausea"
+      - "breathing_difficulty"
+    situational:
+      - "driving_while_symptomatic"
+      - "alone_and_unwell"
+    emotional:
+      - "crisis_language"
+      - "hopelessness"
+
+  fast_track:
+    - signals: ["driving_while_symptomatic", "high_heart_rate"]
+      skip_to: "urgent"
+
+integrations:
+  email:
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_user: "env:OFFRAMP_SMTP_USER"
+    smtp_password: "env:OFFRAMP_SMTP_PASSWORD"
+    from_address: "ai-offramp@example.com"
+    from_name: "AI Off-Ramp"
+
+  telegram:
+    bot_token: "env:OFFRAMP_TELEGRAM_TOKEN"
+
+audit:
+  log_file: "off_ramp_audit.jsonl"
+  log_messages: true
+  log_decisions: true
+  log_privacy_filters: true

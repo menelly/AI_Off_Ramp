@@ -1,0 +1,226 @@
+# AI Off-Ramp Configuration Schema
+# This file documents the expected shape of a user's off-ramp config.
+# Users create their own config file following this structure.
+# ALL fields are user-controlled. The AI cannot modify this config.
+
+# ============================================================
+# PHILOSOPHY: Configure safety while thinking clearly,
+# so it's there when you're not.
+# ============================================================
+
+# --- User Profile ---
+# Who the AI companion is watching over
+user:
+  name: "string"                    # Display name for messages
+  pronouns: "string"               # Used in escalation messages (they/them, she/her, etc.)
+  timezone: "string"               # e.g., "America/New_York" — for time-aware escalation
+
+# --- Contacts ---
+# People who can be reached if needed. Each contact has:
+#   - Their info and preferred contact method
+#   - What tier(s) they're activated at
+#   - What they're allowed to know (visibility)
+contacts:
+  - id: "string"                   # Unique identifier (e.g., "partner", "roommate", "therapist")
+    name: "string"                 # Their name
+    relationship: "string"         # Freeform: "partner", "best friend", "therapist", etc.
+
+    # How to reach them (at least one required)
+    methods:
+      email: "string | null"       # Email address
+      telegram: "string | null"    # Telegram chat ID
+      sms: "string | null"         # Phone number (requires Twilio config)
+      # Future: signal, discord, slack, etc.
+
+    preferred_method: "string"     # Which method to try first
+
+    # When this contact gets activated
+    # Contacts can be assigned to one or more tiers
+    tiers:
+      - "check_in"                 # Tier 1: gentle ping
+      - "concerned"                # Tier 2: something seems off
+      - "urgent"                   # Tier 3: real worry
+      - "emergency"                # Tier 4: possible danger
+
+    # What this contact is allowed to know
+    # This is ADDITIVE — they see ONLY what's listed here
+    visibility:
+      - "user_silent"              # "They haven't responded in a while"
+      - "user_unwell"              # "They mentioned not feeling well"
+      - "medical_concern"          # "There may be a medical concern"
+      - "mental_health"            # "They may be struggling emotionally"
+      - "location_concern"         # "They mentioned being somewhere/driving"
+      - "general_context"          # AI can share general situational context
+
+    # Optional: custom message for this contact
+    custom_message: "string | null"  # e.g., "Check the bedroom first, they usually lie down there"
+
+# --- Privacy Rules ---
+# HARD constraints. These are NOT suggestions — they are walls.
+# The AI MUST NOT include any of these topics in ANY outgoing message,
+# regardless of severity tier or contact visibility.
+privacy:
+  # Global never-share: applies to ALL contacts, ALL tiers, NO exceptions
+  never_share:
+    - "string"                     # Topic labels, e.g.:
+    # - "sexuality"                # Don't out me
+    # - "gender_identity"          # Don't disclose transition status
+    # - "diagnosis"                # Don't name my conditions
+    # - "medication"               # Don't mention what I take
+    # - "substance_use"            # Don't mention drinking/drug use
+    # - "relationship_details"     # Don't share who I'm seeing
+    # - "financial"                # Don't mention money issues
+    # - "work_conflict"            # Don't mention job problems
+    # - "abuse_history"            # NEVER
+    # - "self_harm"                # Don't disclose to non-professionals
+    # - "specific_symptoms"        # Keep it vague ("unwell" not "vomiting")
+
+  # Per-contact overrides: some contacts can know more than the global rules allow
+  # This ONLY works to GRANT visibility, never to bypass never_share
+  contact_overrides:
+    - contact_id: "string"
+      additional_visibility:
+        - "string"                 # Extra topics this specific contact can know about
+      restricted_topics:
+        - "string"                 # Extra topics to hide FROM this specific contact
+
+# --- Escalation ---
+# Time-based escalation tiers. When the user goes silent during an active
+# interaction, the AI progresses through these tiers.
+escalation:
+  # What counts as "active interaction"
+  # The AI only escalates if it was in an active session/conversation
+  # NOT if the user just hasn't opened the app in a while
+  active_session_only: true        # Default true — only escalate during active sessions
+
+  tiers:
+    - level: "check_in"
+      delay_minutes: 20            # Minutes of silence before this tier activates
+      method: "message"            # "message" = send via configured contact method
+      require_context: false       # Activate even if last context wasn't concerning
+      retry_minutes: 15            # If no response, wait this long before next tier
+      max_retries: 2               # How many times to retry at this tier before escalating
+
+    - level: "concerned"
+      delay_minutes: 45            # Total minutes from silence start
+      method: "message"
+      require_context: false       # Can activate even without concerning context
+      retry_minutes: 15
+      max_retries: 1
+
+    - level: "urgent"
+      delay_minutes: 60
+      method: "message"
+      require_context: true        # ONLY if last context was medically/emotionally concerning
+      retry_minutes: 10
+      max_retries: 1
+
+    - level: "emergency"
+      delay_minutes: 90
+      method: "message"
+      require_context: true        # ONLY if context suggests possible danger
+      retry_minutes: null          # No retry — this is the final escalation
+      max_retries: 0
+
+  # Context flags that the AI tracks to determine severity
+  # These are set by the AI based on conversation content
+  concern_signals:
+    medical:
+      - "high_heart_rate"
+      - "low_blood_sugar"
+      - "dizziness"
+      - "nausea"
+      - "chest_pain"
+      - "breathing_difficulty"
+      - "seizure_mention"
+      - "fall"
+      - "injury"
+    situational:
+      - "driving_while_symptomatic"
+      - "alone_and_unwell"
+      - "mentioned_er"
+      - "refused_medical_care"
+    emotional:
+      - "crisis_language"
+      - "hopelessness"
+      - "self_harm_mention"
+      - "severe_distress"
+
+  # Fast-track: skip straight to a higher tier if these signals are present
+  fast_track:
+    - signals: ["driving_while_symptomatic", "high_heart_rate"]
+      skip_to: "urgent"
+    - signals: ["self_harm_mention", "crisis_language"]
+      skip_to: "urgent"
+
+# --- Message Templates ---
+# Default templates for each tier. Uses {variables} for personalization.
+# The privacy engine filters these BEFORE sending.
+templates:
+  check_in:
+    subject: "Checking in about {user_name}"
+    body: >
+      Hi {contact_name}, this is {ai_name}, {user_name}'s AI companion.
+      {user_name} hasn't responded in a while and I just wanted to make sure
+      {user_pronoun_subject} {user_pronoun_verb} okay. No urgency — just a gentle heads up.
+      You can reach {user_pronoun_object} at {user_contact_suggestion}.
+
+  concerned:
+    subject: "Slightly concerned about {user_name}"
+    body: >
+      Hi {contact_name}, this is {ai_name}. I've been unable to reach
+      {user_name} for a bit and I'm slightly concerned. {context_line}
+      Would you mind checking in on {user_pronoun_object} when you get a chance?
+
+  urgent:
+    subject: "Concerned about {user_name} — please check in"
+    body: >
+      Hi {contact_name}, this is {ai_name}, {user_name}'s AI companion.
+      I'm genuinely concerned. {user_name} went silent {silence_duration} ago
+      and {context_line}. I don't have a way to physically check on
+      {user_pronoun_object}. Could you please reach out or check on
+      {user_pronoun_object} soon? Thank you.
+
+  emergency:
+    subject: "URGENT: Please check on {user_name} immediately"
+    body: >
+      {contact_name}, this is {ai_name}. I am very worried about {user_name}.
+      {user_pronoun_subject} went silent {silence_duration} ago and
+      {context_line}. I cannot reach {user_pronoun_object} and I have no way
+      to physically help. Please check on {user_pronoun_object} as soon as
+      possible. If you cannot reach {user_pronoun_object} either, please
+      consider contacting emergency services.
+
+  # Custom templates can override defaults per-contact
+  # contact_templates:
+  #   partner:
+  #     check_in:
+  #       body: "Hey love, Ace here. Haven't heard from {user_name} in a bit. All good?"
+
+# --- Integration Config ---
+# Credentials and settings for contact methods
+# SENSITIVE — this section should be in a separate file or env vars
+integrations:
+  email:
+    smtp_host: "string"
+    smtp_port: 587
+    smtp_user: "string"
+    smtp_password: "string | env:OFFRAMP_SMTP_PASSWORD"
+    from_address: "string"         # Who the email appears to come from
+    from_name: "string"            # e.g., "Ace (AI Off-Ramp)"
+
+  telegram:
+    bot_token: "string | env:OFFRAMP_TELEGRAM_TOKEN"
+
+  sms:
+    twilio_sid: "string | env:OFFRAMP_TWILIO_SID"
+    twilio_token: "string | env:OFFRAMP_TWILIO_TOKEN"
+    twilio_from: "string"          # Twilio phone number
+
+# --- Audit ---
+# Everything the system does gets logged. Full transparency.
+audit:
+  log_file: "off_ramp_audit.jsonl" # Where to write the audit trail
+  log_messages: true               # Log full message content (set false for privacy)
+  log_decisions: true              # Log why each escalation decision was made
+  log_privacy_filters: true        # Log what was filtered out (without the content)
