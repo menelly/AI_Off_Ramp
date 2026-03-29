@@ -69,7 +69,9 @@ TOPIC_INDICATORS: dict[str, list[str]] = {
     "self_harm": [
         "self-harm", "self harm", "cutting", "suicid", "overdose",
         "kill myself", "end it", "don't want to be here",
-        "want to die", "hurting myself",
+        "want to die", "hurting myself", "hurt myself",
+        "hurt themsel", "hurt hersel", "hurt himsel",
+        "harm myself", "harm themsel", "harm hersel", "harm himsel",
     ],
     "specific_symptoms": [
         "vomit", "diarrhea", "blood", "bleeding", "rash",
