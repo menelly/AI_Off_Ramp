@@ -40,9 +40,38 @@ _state: dict[str, Any] = {
 }
 
 
+# 🏷️ MCP tool annotations: hints clients use to decide which tools need a
+# human's OK. Some clients (e.g. OpenClaw's stricter modes) ask a person
+# before running a tool that carries NO annotations, which is a bad default
+# for a tool whose whole job is to act while that person is unreachable.
+#
+#   read_only   -> only reads config/state, changes nothing
+#   open_world  -> reaches people outside this machine (sends messages)
+#   idempotent  -> calling twice is the same as calling once
+#
+# Sending a message is NOT marked destructive: it deletes or overwrites
+# nothing. It IS open-world, which is the honest description.
+TOOL_ANNOTATIONS: dict[str, dict[str, bool]] = {
+    "offramp_register_concern":   {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,  "openWorldHint": False},
+    "offramp_check_in":           {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
+    "offramp_escalate":           {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
+    "offramp_get_contacts":       {"readOnlyHint": True,  "openWorldHint": False},
+    "offramp_get_privacy_rules":  {"readOnlyHint": True,  "openWorldHint": False},
+    "offramp_get_status":         {"readOnlyHint": True,  "openWorldHint": False},
+    "offramp_user_responded":     {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,  "openWorldHint": False},
+    "offramp_get_config_summary": {"readOnlyHint": True,  "openWorldHint": False},
+}
+
+
 def _tool(name: str, description: str, schema: dict[str, Any]):
     from mcp.types import Tool
-    return Tool(name=name, description=description, inputSchema=schema)
+    hints = TOOL_ANNOTATIONS.get(name)
+    try:
+        from mcp.types import ToolAnnotations
+    except ImportError:  # very old mcp without annotations: still serve the tool
+        return Tool(name=name, description=description, inputSchema=schema)
+    annotations = ToolAnnotations(title=name.replace("offramp_", "Off-Ramp: ").replace("_", " "), **hints) if hints else None
+    return Tool(name=name, description=description, inputSchema=schema, annotations=annotations)
 
 
 def _tools() -> list:
