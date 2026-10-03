@@ -77,6 +77,18 @@ async def send_email(
         )
 
 
+def _telegram_payload(chat_id: str, body: str) -> dict[str, Any]:
+    """Build the sendMessage payload as PLAIN TEXT.
+
+    📨 No parse_mode, on purpose. This used to send parse_mode="HTML" with an
+    unescaped body, so any "<" or "&" in the AI's context line (a blood
+    pressure "<90", "Tom & Jo's place") could make Telegram reject the
+    whole message as unparseable. Escalation messages are plain prose; plain
+    text can't fail to parse.
+    """
+    return {"chat_id": chat_id, "text": body}
+
+
 async def send_telegram(
     config: TelegramConfig,
     chat_id: str,
@@ -85,11 +97,7 @@ async def send_telegram(
 ) -> SendResult:
     """Send a Telegram message via Bot API."""
     url = f"https://api.telegram.org/bot{config.bot_token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": body,
-        "parse_mode": "HTML",
-    }
+    payload = _telegram_payload(chat_id, body)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload) as resp:

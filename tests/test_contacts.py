@@ -96,3 +96,11 @@ def test_no_usable_methods(calls):
     assert not r.success
     assert "integration not configured" in r.error
     assert calls["order"] == []
+
+
+def test_telegram_payload_is_plain_text():
+    """No parse_mode: '<' and '&' in a message must not make Telegram reject it."""
+    body = "BP was <90 at Tom & Jo's <place>"
+    payload = C._telegram_payload("123", body)
+    assert "parse_mode" not in payload
+    assert payload == {"chat_id": "123", "text": body}
