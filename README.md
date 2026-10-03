@@ -82,7 +82,7 @@ escalation:
       require_context: true
 
 # How messages actually get sent. Without this block, sends fail with
-# "Integration for 'email' is not configured".
+# "email: integration not configured".
 integrations:
   email:
     smtp_host: "smtp.gmail.com"

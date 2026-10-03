@@ -174,11 +174,46 @@ async def send_message(
 ) -> SendResult:
     """Send a message to a contact using their preferred method.
 
-    Falls back to other available methods if the preferred one fails or
-    isn't configured.
+    🔁 Falls back to the contact's other methods, in order, if the preferred
+    one FAILS or isn't configured. Stops at the first success. If every
+    method fails, the returned error lists what each attempt said, so the
+    AI (and the audit log) can see exactly which doors were tried.
+
+    (Before 2026-10-03 this docstring promised fallback-on-failure but the
+    code only fell back when an integration was missing: one SMTP hiccup
+    and the emergency message just... didn't go anywhere else.)
     """
-    preferred = contact.methods.get_preferred(contact.preferred_method)
-    if not preferred:
+    fallback_order = ["email", "telegram", "sms"]
+    order = [contact.preferred_method] + [m for m in fallback_order if m != contact.preferred_method]
+
+    attempts: list[str] = []
+    last_failure: SendResult | None = None
+    for method in order:
+        addr = getattr(contact.methods, method, None)
+        if not addr:
+            continue
+        integration = getattr(integrations, method, None)
+        if not integration:
+            attempts.append(f"{method}: integration not configured")
+            continue
+
+        if method == "email":
+            result = await send_email(integration, addr, subject, body, contact)
+        elif method == "telegram":
+            result = await send_telegram(integration, addr, body, contact)
+        elif method == "sms":
+            result = await send_sms(integration, addr, body, contact)
+        else:  # unknown preferred_method string in config
+            continue
+
+        if result.success:
+            if attempts:
+                result.details = {**(result.details or {}), "earlier_failures": attempts}
+            return result
+        attempts.append(f"{method}: {result.error}")
+        last_failure = result
+
+    if not attempts:
         return SendResult(
             success=False,
             method="none",
@@ -187,38 +222,11 @@ async def send_message(
             error="No contact methods available",
         )
 
-    method_name, address = preferred
-
-    if method_name == "email" and integrations.email:
-        return await send_email(integrations.email, address, subject, body, contact)
-    elif method_name == "telegram" and integrations.telegram:
-        return await send_telegram(integrations.telegram, address, body, contact)
-    elif method_name == "sms" and integrations.sms:
-        return await send_sms(integrations.sms, address, body, contact)
-
-    # Preferred method not configured — try fallbacks
-    fallback_order = ["email", "telegram", "sms"]
-    for method in fallback_order:
-        if method == method_name:
-            continue
-        addr = getattr(contact.methods, method, None)
-        if not addr:
-            continue
-        integration = getattr(integrations, method, None)
-        if not integration:
-            continue
-
-        if method == "email":
-            return await send_email(integration, addr, subject, body, contact)
-        elif method == "telegram":
-            return await send_telegram(integration, addr, body, contact)
-        elif method == "sms":
-            return await send_sms(integration, addr, body, contact)
-
     return SendResult(
         success=False,
-        method=method_name,
+        method=last_failure.method if last_failure else contact.preferred_method,
         contact_id=contact.id,
         contact_name=contact.name,
-        error=f"Integration for '{method_name}' is not configured",
+        error="All methods failed — " + "; ".join(attempts),
+        details={"attempts": attempts},
     )
