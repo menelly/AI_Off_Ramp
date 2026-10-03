@@ -190,6 +190,13 @@ NTFY_TIER_PRIORITY: dict[str, int] = {
     "emergency": 5,
 }
 
+# Every Off-Ramp push also carries this plain-text tag, so anything else
+# listening on the same topic (a notes inbox, a bot, a poller) can tell an
+# Off-Ramp alert apart from a message the person typed themselves. Found the
+# hard way: our own test pushes got filed as "notes from Ren" by a poller
+# sharing the topic (2026-10-03).
+NTFY_SOURCE_TAG = "ai-off-ramp"
+
 # Tags that ntfy shows as emoji in front of the title.
 NTFY_TIER_TAGS: dict[str, list[str]] = {
     "check_in": ["wave"],
@@ -231,7 +238,7 @@ def _ntfy_request(
         "title": subject,
         "message": body,
         "priority": ntfy_priority_for(contact, tier),
-        "tags": NTFY_TIER_TAGS.get(tier or "", ["wave"]),
+        "tags": NTFY_TIER_TAGS.get(tier or "", ["wave"]) + [NTFY_SOURCE_TAG],
     }
     headers: dict[str, str] = {}
     if config.token:

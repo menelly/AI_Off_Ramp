@@ -89,7 +89,7 @@ def test_publishes_json_to_server_root():
     assert req["path"] == "/"
     assert req["json"] == {
         "topic": "alex-test-topic", "title": "Please check on Alex", "message": "Plain body",
-        "priority": 5, "tags": ["rotating_light"],
+        "priority": 5, "tags": ["rotating_light", "ai-off-ramp"],
     }
     assert "Authorization" not in req["headers"]
     assert result.details["ntfy_message_id"] == "abc"
