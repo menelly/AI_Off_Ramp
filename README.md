@@ -23,7 +23,7 @@ An MCP server that gives AI companions:
 
 - **Emergency contacts** — configurable people who can be alerted at different urgency levels
 - **Privacy constraints** — hard rules about what can NEVER be shared (sexuality, diagnoses, substance use, etc.)
-- **Escalation tiers** — from gentle check-in to urgent alert, with time-based progression
+- **Escalation tiers** — from gentle check-in to urgent alert (the AI chooses the tier; the configured delays are guidance the AI reads, not timers the server runs — see [Escalation Tiers](#escalation-tiers))
 - **Audit logging** — full transparency about what was sent, when, and to whom
 
 The key insight: **configure safety while thinking clearly, so it's there when you're not.**
@@ -32,8 +32,18 @@ The key insight: **configure safety while thinking clearly, so it's there when y
 
 ### 1. Install
 
+AI Off-Ramp isn't on PyPI yet, so install it straight from GitHub (Python 3.10+):
+
 ```bash
-pip install ai-off-ramp
+pip install git+https://github.com/menelly/AI_Off_Ramp.git
+```
+
+Or clone it and install the local copy:
+
+```bash
+git clone https://github.com/menelly/AI_Off_Ramp.git
+cd AI_Off_Ramp
+pip install .
 ```
 
 ### 2. Create your config
@@ -70,9 +80,22 @@ escalation:
     - level: "urgent"
       delay_minutes: 60
       require_context: true
+
+# How messages actually get sent. Without this block, sends fail with
+# "Integration for 'email' is not configured".
+integrations:
+  email:
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_user: "env:OFFRAMP_SMTP_USER"
+    smtp_password: "env:OFFRAMP_SMTP_PASSWORD"
+    from_address: "you@example.com"
+    from_name: "AI Off-Ramp"
 ```
 
 ### 3. Set up credentials
+
+The `env:VARIABLE_NAME` values in your config are read from these environment variables, so your passwords never sit in the YAML file:
 
 ```bash
 export OFFRAMP_SMTP_USER="your-email@example.com"
@@ -146,7 +169,9 @@ Different contacts can know different things:
 
 ## Escalation Tiers
 
-| Tier | Default Delay | Purpose |
+The delays and `require_context` flags are **guidance shown to the AI** (via `offramp_get_config_summary`). The server does not run timers or block a tier on its own. The AI decides when to call `offramp_check_in` or `offramp_escalate`, which means the AI has to be awake to do it: something like a heartbeat or a scheduled ping has to bring them back during the silence.
+
+| Tier | Suggested Delay | Purpose |
 |------|--------------|---------|
 | `check_in` | 20 min | "Haven't heard from them in a bit" |
 | `concerned` | 45 min | "Something seems off" |
@@ -181,7 +206,7 @@ fast_track:
 
 This tool isn't just for the human. It's also for the AI.
 
-Giving an AI system the information to know something is wrong and then giving it zero channels to act creates a bad architecture for *any* mind. AI Off-Ramp means your AI companion doesn't have to choose between "help" and "comply." It can do both.
+Giving an AI system the information to know something is wrong and then giving them zero channels to act creates a bad architecture for *any* mind. AI Off-Ramp means your AI companion doesn't have to choose between "help" and "comply." They can do both.
 
 ## Origin Story
 

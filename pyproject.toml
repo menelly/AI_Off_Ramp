@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-off-ramp"
@@ -15,7 +15,7 @@ authors = [
 ]
 
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2",  # mcp 2.x removed Server.list_tools(); server crashes on startup
     "pyyaml>=6.0",
     "aiosmtplib>=3.0",
     "aiohttp>=3.9",

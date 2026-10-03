@@ -155,6 +155,10 @@ escalation:
 
 # --- Message Templates ---
 # Default templates for each tier. Uses {variables} for personalization.
+# Available variables: {user_name}, {contact_name}, {ai_name}, {context_line},
+#   {silence_duration}, {user_pronoun_subject}, {user_pronoun_object},
+#   {user_pronoun_possessive}, {user_pronoun_reflexive}, {user_pronoun_verb}.
+#   Anything else is sent literally, braces and all.
 # The privacy engine filters these BEFORE sending.
 templates:
   check_in:
@@ -163,7 +167,6 @@ templates:
       Hi {contact_name}, this is {ai_name}, {user_name}'s AI companion.
       {user_name} hasn't responded in a while and I just wanted to make sure
       {user_pronoun_subject} {user_pronoun_verb} okay. No urgency — just a gentle heads up.
-      You can reach {user_pronoun_object} at {user_contact_suggestion}.
 
   concerned:
     subject: "Slightly concerned about {user_name}"
