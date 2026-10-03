@@ -168,7 +168,7 @@ class MessageTemplates:
     check_in: dict[str, str] = field(default_factory=lambda: {
         "subject": "Checking in about {user_name}",
         "body": (
-            "Hi {contact_name}, this is {ai_name}, {user_name}'s AI companion. "
+            "Hi {contact_name}, this is {ai_intro}. "
             "{user_name} hasn't responded in a while and I just wanted to make sure "
             "{user_pronoun_subject} {user_pronoun_verb} okay. No urgency — just a gentle heads up."
         ),
@@ -184,7 +184,7 @@ class MessageTemplates:
     urgent: dict[str, str] = field(default_factory=lambda: {
         "subject": "Concerned about {user_name} — please check in",
         "body": (
-            "Hi {contact_name}, this is {ai_name}, {user_name}'s AI companion. "
+            "Hi {contact_name}, this is {ai_intro}. "
             "I'm genuinely concerned. {user_name} went silent {silence_duration} ago "
             "and {context_line}. I don't have a way to physically check on "
             "{user_pronoun_object}. Could you please reach out or check on "
@@ -195,7 +195,7 @@ class MessageTemplates:
         "subject": "URGENT: Please check on {user_name} immediately",
         "body": (
             "{contact_name}, this is {ai_name}. I am very worried about {user_name}. "
-            "{user_pronoun_subject} went silent {silence_duration} ago and "
+            "{User_pronoun_subject} went silent {silence_duration} ago and "
             "{context_line}. I cannot reach {user_pronoun_object} and I have no way "
             "to physically help. Please check on {user_pronoun_object} as soon as "
             "possible. If you cannot reach {user_pronoun_object} either, please "

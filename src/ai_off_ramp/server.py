@@ -104,8 +104,7 @@ def _tools() -> list:
                     },
                     "ai_name": {
                         "type": "string",
-                        "description": "Your name as the AI companion, for the message signature.",
-                        "default": "your AI companion",
+                        "description": "Your name as the AI companion, for the message signature. If omitted, messages say \"<user>'s AI companion\".",
                     },
                 },
                 "required": ["silence_duration"],
@@ -140,8 +139,7 @@ def _tools() -> list:
                     },
                     "ai_name": {
                         "type": "string",
-                        "description": "Your name as the AI companion.",
-                        "default": "your AI companion",
+                        "description": "Your name as the AI companion. If omitted, messages say \"<user>'s AI companion\".",
                     },
                 },
                 "required": ["tier", "context_line", "silence_duration"],
@@ -271,7 +269,7 @@ async def _dispatch(config, audit_log, name: str, args: dict[str, Any]) -> Any:
             tier="check_in",
             context_line=args.get("context_line", ""),
             silence_duration=args.get("silence_duration", "a while"),
-            ai_name=args.get("ai_name", "your AI companion"),
+            ai_name=args.get("ai_name"),
         )
 
     if name == "offramp_escalate":
@@ -280,7 +278,7 @@ async def _dispatch(config, audit_log, name: str, args: dict[str, Any]) -> Any:
             tier=args["tier"],
             context_line=args["context_line"],
             silence_duration=args["silence_duration"],
-            ai_name=args.get("ai_name", "your AI companion"),
+            ai_name=args.get("ai_name"),
         )
 
     if name == "offramp_get_contacts":
@@ -389,7 +387,7 @@ async def _do_escalation(
     tier: str,
     context_line: str,
     silence_duration: str,
-    ai_name: str,
+    ai_name: str | None,
 ) -> dict[str, Any]:
     """Execute an escalation at a given tier."""
     from .contacts import send_message

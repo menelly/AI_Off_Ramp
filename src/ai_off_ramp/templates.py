@@ -6,66 +6,16 @@ message with all variables filled in and privacy constraints applied.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .config import Contact, OffRampConfig
 from .privacy import PrivacyCheckResult, filter_message, validate_outgoing_message
+from .pronouns import PRONOUN_MAP, get_pronouns as _get_pronouns  # noqa: F401 (re-export)
 
-
-# Pronoun lookup for template variables
-PRONOUN_MAP: dict[str, dict[str, str]] = {
-    "they/them": {
-        "subject": "they",
-        "object": "them",
-        "possessive": "their",
-        "reflexive": "themselves",
-        "verb": "are",   # "they are" not "they is"
-    },
-    "she/her": {
-        "subject": "she",
-        "object": "her",
-        "possessive": "her",
-        "reflexive": "herself",
-        "verb": "is",
-    },
-    "he/him": {
-        "subject": "he",
-        "object": "him",
-        "possessive": "his",
-        "reflexive": "himself",
-        "verb": "is",
-    },
-    "it/its": {
-        "subject": "it",
-        "object": "it",
-        "possessive": "its",
-        "reflexive": "itself",
-        "verb": "is",
-    },
-    "xe/xem": {
-        "subject": "xe",
-        "object": "xem",
-        "possessive": "xyr",
-        "reflexive": "xemself",
-        "verb": "is",
-    },
-    "ze/hir": {
-        "subject": "ze",
-        "object": "hir",
-        "possessive": "hir",
-        "reflexive": "hirself",
-        "verb": "is",
-    },
-}
-
-
-def _get_pronouns(pronoun_str: str) -> dict[str, str]:
-    """Get pronoun forms from a pronoun string like 'they/them'."""
-    normalized = pronoun_str.lower().strip()
-    if normalized in PRONOUN_MAP:
-        return PRONOUN_MAP[normalized]
-    # Fallback: use they/them for unknown pronoun sets
-    return PRONOUN_MAP["they/them"]
+# The server used to default ai_name to this, which rendered as
+# "this is your AI companion, Alex's AI companion". Treat it as "no name given".
+_UNNAMED = {"", "your ai companion"}
 
 
 @dataclass
@@ -85,7 +35,7 @@ def render_message(
     tier: str,
     context_line: str = "",
     silence_duration: str = "a while",
-    ai_name: str = "your AI companion",
+    ai_name: str | None = None,
 ) -> RenderedMessage:
     """Render a message for a specific tier and contact.
 
@@ -107,10 +57,20 @@ def render_message(
 
     # Step 3: Build template variables
     pronouns = _get_pronouns(config.user.pronouns)
+    # 🏷️ Who is speaking. Named: "Ace" / "Ace, Alex's AI companion".
+    # Unnamed: "Alex's AI companion" for both, never doubled.
+    companion = f"{config.user.name}'s AI companion"
+    if ai_name and ai_name.strip().lower() not in _UNNAMED:
+        ai_name = ai_name.strip()
+        ai_intro = f"{ai_name}, {companion}"
+    else:
+        ai_name = companion
+        ai_intro = companion
     variables = {
         "user_name": config.user.name,
         "contact_name": contact.name,
         "ai_name": ai_name,
+        "ai_intro": ai_intro,
         "context_line": safe_context,
         "silence_duration": silence_duration,
         "user_pronoun_subject": pronouns["subject"],
@@ -118,6 +78,10 @@ def render_message(
         "user_pronoun_possessive": pronouns["possessive"],
         "user_pronoun_reflexive": pronouns["reflexive"],
         "user_pronoun_verb": pronouns["verb"],
+        # Capitalised forms, for a pronoun that starts a sentence.
+        "User_pronoun_subject": pronouns["subject"].capitalize(),
+        "User_pronoun_object": pronouns["object"].capitalize(),
+        "User_pronoun_possessive": pronouns["possessive"].capitalize(),
     }
 
     # Step 4: Render
@@ -131,6 +95,10 @@ def render_message(
         for key, val in variables.items():
             subject = subject.replace(f"{{{key}}}", val)
             body = body.replace(f"{{{key}}}", val)
+
+    # A context line that already ends in "." lands before a template's own
+    # "." -> "..". Collapse exactly-two periods (an ellipsis is left alone).
+    body = re.sub(r"(?<!\.)\.\.(?!\.)", ".", body)
 
     # Step 5: Add custom message if contact has one
     if contact.custom_message:

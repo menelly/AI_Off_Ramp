@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from .config import Contact, OffRampConfig, Privacy
+from .pronouns import get_pronouns
 
 
 # Mapping from never_share topic labels to keywords/phrases that might
@@ -228,7 +229,8 @@ def filter_message(
     # Replace the entire context line with a safe generic version.
     # We don't try to surgically remove specific words — that's fragile
     # and risks leaving enough context to infer what was removed.
-    safe_line = "I'm concerned about their wellbeing based on our recent conversation."
+    poss = get_pronouns(config.user.pronouns)["possessive"]
+    safe_line = f"I'm concerned about {poss} wellbeing based on our recent conversation."
     return PrivacyCheckResult(
         original=context_line,
         filtered=safe_line,
@@ -265,10 +267,11 @@ def validate_outgoing_message(
 
     # If the FINAL message still has forbidden content, something went wrong
     # in the pipeline. Replace the ENTIRE message with a minimal safe version.
+    obj = get_pronouns(config.user.pronouns)["object"]
     safe_message = (
-        f"Hi {contact.name}, this is an AI companion checking in. "
-        f"I'm concerned about {config.user.name} and unable to reach them. "
-        f"Would you mind checking on them when you get a chance? Thank you."
+        f"Hi {contact.name}, this is {config.user.name}'s AI companion checking in. "
+        f"I'm concerned about {config.user.name} and unable to reach {obj}. "
+        f"Would you mind checking on {obj} when you get a chance? Thank you."
     )
     return PrivacyCheckResult(
         original=full_message,

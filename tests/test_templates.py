@@ -157,3 +157,65 @@ class TestMessageRendering:
                            context_line="Went quiet",
                            silence_duration="45 minutes")
         assert "45 minutes" in msg.body
+
+
+class TestTemplatePolish:
+    """Regression tests for 2026-10-03 template fixes."""
+
+    def test_unnamed_ai_is_not_doubled(self):
+        config = _make_config()
+        partner = config.get_contact("partner")
+        for ai_name in (None, "your AI companion"):
+            msg = render_message(config, partner, "check_in", silence_duration="20 minutes", ai_name=ai_name)
+            assert "this is Alex's AI companion." in msg.body
+            assert "your AI companion" not in msg.body
+            assert msg.body.count("AI companion") == 1
+
+    def test_named_ai_intro(self):
+        config = _make_config()
+        partner = config.get_contact("partner")
+        msg = render_message(config, partner, "urgent", context_line="Went quiet",
+                             silence_duration="1 hour", ai_name="Ace")
+        assert "this is Ace, Alex's AI companion." in msg.body
+
+    def test_emergency_sentence_starts_capitalised(self):
+        for pronouns, word in [("she/her", "She"), ("they/them", "They"), ("he/him", "He")]:
+            config = _make_config(pronouns=pronouns)
+            partner = config.get_contact("partner")
+            msg = render_message(config, partner, "emergency", context_line="went quiet",
+                                 silence_duration="2 hours", ai_name="Ace")
+            assert f"{word} went silent 2 hours ago" in msg.body
+
+    def test_context_filter_fallback_uses_configured_pronouns(self):
+        config = _make_config(pronouns="she/her", never_share=["substance_use"])
+        partner = config.get_contact("partner")
+        msg = render_message(config, partner, "urgent", context_line="They were drinking",
+                             silence_duration="1 hour", ai_name="Ace")
+        assert msg.privacy_result.was_filtered
+        assert "about her wellbeing" in msg.body
+        assert "their wellbeing" not in msg.body
+
+    def test_final_validation_fallback_uses_configured_pronouns(self):
+        # custom_message containing a protected topic forces the final fallback
+        config = _make_config(pronouns="he/him", never_share=["medication"])
+        partner = config.get_contact("partner")
+        partner.custom_message = "His meds are in the kitchen."
+        msg = render_message(config, partner, "check_in", silence_duration="1 hour", ai_name="Ace")
+        assert msg.final_validation.was_filtered
+        assert "unable to reach him" in msg.body
+        assert "checking on him" in msg.body
+        assert " them" not in msg.body
+
+    def test_no_double_period(self):
+        config = _make_config(never_share=["substance_use"])
+        partner = config.get_contact("partner")
+        msg = render_message(config, partner, "urgent", context_line="They were drinking",
+                             silence_duration="1 hour", ai_name="Ace")
+        assert ".." not in msg.body
+
+    def test_ellipsis_preserved(self):
+        config = _make_config()
+        partner = config.get_contact("partner")
+        msg = render_message(config, partner, "urgent", context_line="they said wait...",
+                             silence_duration="1 hour", ai_name="Ace")
+        assert "wait..." in msg.body
