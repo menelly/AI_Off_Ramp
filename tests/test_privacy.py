@@ -357,3 +357,66 @@ class TestPrivacyEdgeCases:
         )
         assert result.was_filtered
         assert "self-harm" not in result.filtered
+
+
+class TestWordBoundaries:
+    """Regression tests for substring false positives (2026-10-03).
+
+    The engine used to match indicators anywhere inside a string, so with
+    substance_use protected, "high heart rate" (the exact situation this tool
+    was built for) got scrubbed to a generic line because of the word "high".
+    Over-filtering is still the design; these pin down the noise we removed
+    AND the leaks we must not open while removing it.
+    """
+
+    # --- false positives that must be GONE ---
+
+    def test_high_heart_rate_is_not_substance_use(self):
+        assert "substance_use" not in _detect_topics("They reported a high heart rate and nausea")
+
+    def test_vitals_phrases_are_not_substance_use(self):
+        for phrase in ["high pulse", "high blood pressure", "high fever",
+                       "high temperature", "high-heart-rate alarm", "high HR"]:
+            assert "substance_use" not in _detect_topics(phrase), phrase
+
+    def test_transport_is_not_gender_identity(self):
+        assert "gender_identity" not in _detect_topics("Waiting on public transport")
+
+    def test_attend_it_is_not_self_harm(self):
+        assert "self_harm" not in _detect_topics("They were going to attend it later")
+
+    def test_highway_and_pillow_are_clean(self):
+        topics = _detect_topics("Drove on the highway, then lay down on a pillow")
+        assert "substance_use" not in topics
+        assert "medication" not in topics
+
+    def test_high_heart_rate_context_survives_filter(self):
+        config = _make_config(never_share=["substance_use"])
+        partner = config.get_contact("partner")
+        result = filter_message(config, partner, "They had a high heart rate while putting on shoes")
+        assert not result.was_filtered
+        assert "high heart rate" in result.filtered
+
+    # --- real matches that must STILL fire ---
+
+    def test_high_alone_still_substance_use(self):
+        assert "substance_use" in _detect_topics("They said they were high")
+
+    def test_trans_still_gender_identity(self):
+        assert "gender_identity" in _detect_topics("They are trans")
+
+    def test_end_it_still_self_harm(self):
+        assert "self_harm" in _detect_topics("They said they want to end it all")
+
+    def test_inflections_still_match(self):
+        assert "substance_use" in _detect_topics("They relapsed last week")
+        assert "abuse_history" in _detect_topics("It was a traumatic event")
+        assert "medication" in _detect_topics("Took two pills")
+        assert "self_harm" in _detect_topics("They seemed suicidal")
+
+    def test_curly_apostrophe_still_matches(self):
+        assert "self_harm" in _detect_topics("They said they don’t want to be here")
+
+    def test_high_blood_sugar_still_trips_blood(self):
+        """Only the word 'high' is neutralised; the rest of the phrase is scanned."""
+        assert "specific_symptoms" in _detect_topics("high blood sugar")

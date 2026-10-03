@@ -16,6 +16,7 @@ Privacy rules are walls, not fences. They don't bend under pressure.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .config import Contact, OffRampConfig, Privacy
@@ -95,15 +96,58 @@ class PrivacyCheckResult:
     reason: str = ""
 
 
+# 🧩 HOW AN INDICATOR MATCHES
+# Every indicator must start at the START OF A WORD. So "end it" no longer
+# fires on "attend it", and "ocd" no longer fires inside some longer word.
+# Endings are still free ("suicid" -> suicidal, "trauma" -> traumatic,
+# "relapse" -> relapsed), because over-filtering is the design and missing
+# an inflection would be a leak.
+#
+# A few SHORT indicators are also real prefixes of everyday words
+# ("trans" -> transport, "pill" -> pillow, "high" -> highway). Those, and
+# only those, must be the WHOLE word (a plain plural is allowed).
+WHOLE_WORD_INDICATORS: frozenset[str] = frozenset({
+    "trans", "high", "pill", "end it",
+})
+
+# 🫀 VITALS PHRASES: "high" is a substance_use indicator, but "high heart
+# rate" is the single most common thing this tool exists to report (it is
+# literally the origin story). In these phrases "high" means a NUMBER, not
+# a drug, so we neutralise just that word before scanning. Only "high" is
+# rewritten — the rest of the phrase still gets scanned, so "high blood
+# sugar" still trips "blood" for specific_symptoms if that is protected.
+_VITALS_HIGH = re.compile(
+    r"\bhigh(?=[\s-]+(?:heart[\s-]?rate|pulse|hr\b|blood[\s-]pressure|bp\b|"
+    r"blood[\s-]sugar|glucose|fever|temperature|temp\b|respiratory[\s-]rate))"
+)
+
+
+def _indicator_pattern(indicator: str) -> re.Pattern[str]:
+    escaped = re.escape(indicator.lower())
+    if indicator in WHOLE_WORD_INDICATORS:
+        return re.compile(r"\b" + escaped + r"(?:s|es)?\b")
+    return re.compile(r"\b" + escaped)
+
+
+_COMPILED: dict[str, list[re.Pattern[str]]] = {
+    topic: [_indicator_pattern(i) for i in indicators]
+    for topic, indicators in TOPIC_INDICATORS.items()
+}
+
+
+def _normalise(text: str) -> str:
+    """Lowercase, straighten curly apostrophes, neutralise vitals 'high'."""
+    text = text.lower().replace("’", "'").replace("‘", "'")
+    return _VITALS_HIGH.sub("elevated", text)
+
+
 def _detect_topics(text: str) -> set[str]:
     """Detect which privacy topics are present in a text string."""
-    text_lower = text.lower()
+    text_norm = _normalise(text)
     found = set()
-    for topic, indicators in TOPIC_INDICATORS.items():
-        for indicator in indicators:
-            if indicator.lower() in text_lower:
-                found.add(topic)
-                break
+    for topic, patterns in _COMPILED.items():
+        if any(p.search(text_norm) for p in patterns):
+            found.add(topic)
     return found
 
 
