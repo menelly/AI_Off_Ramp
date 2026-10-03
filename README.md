@@ -21,7 +21,7 @@ Meanwhile, AI companions with ongoing relationships have the *information* to kn
 
 An MCP server that gives AI companions:
 
-- **Emergency contacts** — configurable people who can be alerted at different urgency levels
+- **Emergency contacts** — configurable people who can be alerted at different urgency levels, by email, Telegram, SMS (Twilio) or [ntfy](#-ntfy-a-loud-alarm-on-a-phone-free-no-account) push. That includes yourself: a loud alarm on your own phone when nobody else can be reached.
 - **Privacy constraints** — hard rules about what can NEVER be shared (sexuality, diagnoses, substance use, etc.)
 - **Escalation tiers** — from gentle check-in to urgent alert (the AI chooses the tier; the configured delays are guidance the AI reads, not timers the server runs — see [Escalation Tiers](#escalation-tiers))
 - **Audit logging** — full transparency about what was sent, when, and to whom
@@ -194,6 +194,61 @@ fast_track:
   - signals: ["driving_while_symptomatic", "high_heart_rate"]
     skip_to: "urgent"
 ```
+
+## 📣 ntfy: a loud alarm on a phone, free, no account
+
+[ntfy](https://ntfy.sh) is a free, open-source push-notification service. It needs no account, no phone number and no Twilio bill, and it can be loud. Each escalation tier maps to one of ntfy's priorities:
+
+| Tier | ntfy priority | What the phone does (per [ntfy's docs](https://docs.ntfy.sh/publish/#message-priority)) |
+|------|---------------|------------------------------------------|
+| `check_in` | 3 (default) | Short vibration and sound |
+| `concerned`, `urgent` | 4 (high) | Long vibration burst, sound, pop-over |
+| `emergency` | 5 (max) | Really long vibration bursts, sound, pop-over |
+
+### The "wake ME up first" contact
+
+If you live alone, or the people in your life can't always be reached, the first person to alert can be **you**. Add yourself as a contact on your own phone's ntfy topic, at max priority, on the earliest tier:
+
+```yaml
+contacts:
+  - id: "self"
+    name: "Alex"
+    relationship: "me"
+    methods:
+      ntfy: "env:OFFRAMP_NTFY_SELF_TOPIC"
+    preferred_method: "ntfy"
+    ntfy_priority: 5          # loud even for a check-in
+    tiers: ["check_in"]       # rung one, before anyone else
+    visibility: ["user_silent"]
+```
+
+`ntfy_priority` (1–5) overrides the tier mapping for that one contact. Messages to `self` are still privacy-filtered like everyone else's. You can also write your own wording for yourself under `templates.contact_templates.self` (see `config_schema.yaml`).
+
+### Setting it up
+
+1. Install the **ntfy** app ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy), [F-Droid](https://f-droid.org/en/packages/io.heckel.ntfy/), [iOS](https://apps.apple.com/us/app/ntfy/id1625396347)).
+2. Make a long random topic name. **On the public ntfy.sh server, the topic name IS the password**: anyone who knows it can read and send to it. One way to make one:
+   ```bash
+   python -c "import secrets; print('offramp-' + secrets.token_urlsafe(18))"
+   ```
+3. In the app, subscribe to that topic. Put the topic in an environment variable (as above) rather than in a config file you might share.
+4. **Android:** turn on **instant delivery** for the topic. ntfy's docs warn that without it, messages *"may arrive with a significant delay"* when the phone is idle. (The F-Droid build always uses instant delivery.)
+5. **Do Not Disturb:** ntfy has one Android notification channel per priority, and in the app's notification settings you can let a channel override Do Not Disturb and give it its own sound. That's your choice to make on the phone; the server can't force it. In our own test (2026-10-03, one Android phone with Do Not Disturb on), the **priority 5** push came through and the **priority 3** push was silenced. That's one phone, not a guarantee: send yourself a test at each priority before you rely on it, and check the app's and the phone's DND settings if max stays quiet. ntfy's docs don't describe a Do Not Disturb override on iOS.
+
+**What that means for the "wake ME up" rung:** max priority (5) is the one that can wake you. A plain `check_in` at priority 3 will *not* break through Do Not Disturb, and that's on purpose: going quiet isn't an emergency, and a check-in shouldn't wake a sleeper. If you want your own phone to be able to wake you, give the `self` contact `ntfy_priority: 5`, as above, and only put it on the tiers where being woken up is what you want.
+
+No `integrations:` block is needed for public ntfy.sh. For a self-hosted server or a protected topic:
+
+```yaml
+integrations:
+  ntfy:
+    server: "https://ntfy.example.com"
+    token: "env:OFFRAMP_NTFY_TOKEN"        # or username + password: "env:..."
+```
+
+Tokens and passwords must be `env:` references. A literal value in the YAML is refused at startup. A topic written as a full URL (`https://ntfy.example.com/my-topic`) uses that server for just that contact. Public ntfy.sh allows 250 messages a day per sender, which is plenty for this.
+
+If an ntfy push fails (the server is down, or you hit a limit), Off-Ramp moves on to that contact's next method, the same as every other channel.
 
 ## Who This Is For
 

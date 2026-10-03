@@ -321,6 +321,7 @@ async def _dispatch(config, audit_log, name: str, args: dict[str, Any]) -> Any:
                 "has_email": c.methods.email is not None,
                 "has_telegram": c.methods.telegram is not None,
                 "has_sms": c.methods.sms is not None,
+                "has_ntfy": c.methods.ntfy is not None,
                 "visibility": c.visibility,
             }
             for c in config.contacts
@@ -466,6 +467,7 @@ async def _do_escalation(
             contact=contact,
             subject=rendered.subject,
             body=rendered.body,
+            tier=tier,
         )
 
         # Log the send

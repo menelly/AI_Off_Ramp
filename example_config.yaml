@@ -11,6 +11,21 @@ user:
   timezone: "America/New_York"
 
 contacts:
+  # Rung one: a loud push to MY OWN phone via ntfy (https://ntfy.sh), before
+  # anyone else is bothered. Free, no account. Subscribe to the topic in the
+  # ntfy app. On public ntfy.sh the topic name is the password: make it long
+  # and random, and keep it in an env var.
+  - id: "self"
+    name: "Alex"
+    relationship: "me"
+    methods:
+      ntfy: "env:OFFRAMP_NTFY_SELF_TOPIC"
+    preferred_method: "ntfy"
+    ntfy_priority: 5            # max: loud even for a check-in
+    tiers: ["check_in"]
+    visibility:
+      - "user_silent"
+
   - id: "partner"
     name: "Jordan"
     relationship: "partner"
@@ -130,6 +145,12 @@ integrations:
 
   telegram:
     bot_token: "env:OFFRAMP_TELEGRAM_TOKEN"
+
+  # Optional. Public ntfy.sh needs no block at all. For a self-hosted server
+  # or a protected topic, uncomment (credentials must be env: references):
+  # ntfy:
+  #   server: "https://ntfy.example.com"
+  #   token: "env:OFFRAMP_NTFY_TOKEN"
 
 audit:
   log_file: "off_ramp_audit.jsonl"

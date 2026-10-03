@@ -36,13 +36,16 @@ class ContactMethod:
     email: str | None = None
     telegram: str | None = None
     sms: str | None = None
+    # 📣 ntfy topic name ("my-long-random-topic"), or a full URL to use a
+    # different server for just this contact ("https://ntfy.example.com/topic").
+    ntfy: str | None = None
 
     def has_any(self) -> bool:
-        return any([self.email, self.telegram, self.sms])
+        return any([self.email, self.telegram, self.sms, self.ntfy])
 
     def get_preferred(self, preferred: str) -> tuple[str, str] | None:
         """Return (method_name, address) for the preferred method, or first available."""
-        methods = {"email": self.email, "telegram": self.telegram, "sms": self.sms}
+        methods = {"email": self.email, "telegram": self.telegram, "sms": self.sms, "ntfy": self.ntfy}
         if preferred in methods and methods[preferred]:
             return (preferred, methods[preferred])
         for name, addr in methods.items():
@@ -61,6 +64,9 @@ class Contact:
     tiers: list[str]
     visibility: list[str]
     custom_message: str | None = None
+    # ntfy only: force one priority (1-5) for this contact at every tier.
+    # The "wake ME up first" self contact sets 5 so even a check-in is loud.
+    ntfy_priority: int | None = None
 
 
 @dataclass
@@ -142,10 +148,22 @@ class SmsConfig:
 
 
 @dataclass
+class NtfyConfig:
+    """ntfy push notifications (https://ntfy.sh). No account needed on the
+    public server; token / username+password are for protected topics or a
+    self-hosted server, and must come from env vars, never the YAML."""
+    server: str = "https://ntfy.sh"
+    token: str | None = None
+    username: str | None = None
+    password: str | None = None
+
+
+@dataclass
 class Integrations:
     email: EmailConfig | None = None
     telegram: TelegramConfig | None = None
     sms: SmsConfig | None = None
+    ntfy: NtfyConfig | None = None
 
 
 @dataclass
@@ -239,6 +257,7 @@ def _parse_contact_method(raw: dict[str, Any]) -> ContactMethod:
         email=_resolve_env(raw.get("email", "")) or None,
         telegram=_resolve_env(raw.get("telegram", "")) or None,
         sms=_resolve_env(raw.get("sms", "")) or None,
+        ntfy=_resolve_env(raw.get("ntfy", "")) or None,
     )
 
 
@@ -252,7 +271,19 @@ def _parse_contact(raw: dict[str, Any]) -> Contact:
         tiers=raw.get("tiers", []),
         visibility=raw.get("visibility", []),
         custom_message=raw.get("custom_message"),
+        ntfy_priority=_parse_ntfy_priority(raw),
     )
+
+
+def _parse_ntfy_priority(raw: dict[str, Any]) -> int | None:
+    value = raw.get("ntfy_priority")
+    if value is None:
+        return None
+    if not isinstance(value, int) or not 1 <= value <= 5:
+        raise ValueError(
+            f"Contact '{raw.get('id')}': ntfy_priority must be a whole number 1-5 (got {value!r})"
+        )
+    return value
 
 
 def _parse_email_config(raw: dict[str, Any]) -> EmailConfig:
@@ -268,6 +299,32 @@ def _parse_email_config(raw: dict[str, Any]) -> EmailConfig:
 
 def _parse_telegram_config(raw: dict[str, Any]) -> TelegramConfig:
     return TelegramConfig(bot_token=_resolve_env(raw["bot_token"]))
+
+
+def _env_only(raw: dict[str, Any], key: str) -> str | None:
+    """A credential that must be an env: reference, never a literal in the YAML."""
+    value = raw.get(key)
+    if value is None or value == "":
+        return None
+    if not (isinstance(value, str) and ENV_PATTERN.match(value)):
+        raise ValueError(
+            f"integrations.ntfy.{key} must be an env: reference (e.g. \"env:OFFRAMP_NTFY_TOKEN\"), "
+            f"not a value written into the config file"
+        )
+    return _resolve_env(value)
+
+
+def _parse_ntfy_config(raw: dict[str, Any] | None) -> NtfyConfig:
+    raw = raw or {}
+    cfg = NtfyConfig(
+        server=str(_resolve_env(raw.get("server", "https://ntfy.sh"))).rstrip("/"),
+        token=_env_only(raw, "token"),
+        username=_resolve_env(raw["username"]) if raw.get("username") else None,
+        password=_env_only(raw, "password"),
+    )
+    if bool(cfg.username) != bool(cfg.password):
+        raise ValueError("integrations.ntfy: username and password must be set together")
+    return cfg
 
 
 def _parse_sms_config(raw: dict[str, Any]) -> SmsConfig:
@@ -358,7 +415,12 @@ def load_config(path: str | Path) -> OffRampConfig:
         email=_parse_email_config(int_raw["email"]) if "email" in int_raw else None,
         telegram=_parse_telegram_config(int_raw["telegram"]) if "telegram" in int_raw else None,
         sms=_parse_sms_config(int_raw["sms"]) if "sms" in int_raw else None,
+        ntfy=_parse_ntfy_config(int_raw["ntfy"]) if "ntfy" in int_raw else None,
     )
+    # Public ntfy.sh needs no credentials, so a contact with an ntfy topic
+    # works even without an integrations.ntfy block.
+    if integrations.ntfy is None and any(c.methods.ntfy for c in contacts):
+        integrations.ntfy = NtfyConfig()
 
     # Audit
     aud_raw = raw.get("audit", {})

@@ -30,6 +30,7 @@ contacts:
       email: "string | null"       # Email address
       telegram: "string | null"    # Telegram chat ID
       sms: "string | null"         # Phone number (requires Twilio config)
+      ntfy: "string | null"        # ntfy topic, or a full URL https://server/topic
       # Future: signal, discord, slack, etc.
 
     preferred_method: "string"     # Which method to try first
@@ -54,6 +55,11 @@ contacts:
 
     # Optional: custom message for this contact
     custom_message: "string | null"  # e.g., "Check the bedroom first, they usually lie down there"
+
+    # Optional, ntfy only: one priority (1-5) for this contact at every tier.
+    # Without it: check_in=3, concerned=4, urgent=4, emergency=5.
+    # A "self" contact (your own phone) at 5 is the "wake ME up first" rung.
+    ntfy_priority: "int 1-5 | null"
 
 # --- Privacy Rules ---
 # HARD constraints. These are NOT suggestions — they are walls.
@@ -223,6 +229,13 @@ integrations:
     twilio_sid: "string | env:OFFRAMP_TWILIO_SID"
     twilio_token: "string | env:OFFRAMP_TWILIO_TOKEN"
     twilio_from: "string"          # Twilio phone number
+
+  # Optional: public ntfy.sh works with no block at all.
+  ntfy:
+    server: "https://ntfy.sh"      # or your self-hosted server
+    token: "env:OFFRAMP_NTFY_TOKEN | null"         # MUST be env: (literals are refused)
+    username: "string | null"                      # with password, for basic auth
+    password: "env:OFFRAMP_NTFY_PASSWORD | null"   # MUST be env:
 
 # --- Audit ---
 # Everything the system does gets logged. Full transparency.

@@ -1,11 +1,12 @@
 """Contact method integrations for AI Off-Ramp.
 
-Handles actually sending messages via email, Telegram, or SMS.
+Handles actually sending messages via email, Telegram, SMS, or ntfy push.
 Each method is async and returns a send result.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 from dataclasses import dataclass
 from email.mime.text import MIMEText
@@ -17,6 +18,7 @@ from .config import (
     Contact,
     EmailConfig,
     Integrations,
+    NtfyConfig,
     SmsConfig,
     TelegramConfig,
 )
@@ -174,11 +176,126 @@ async def send_sms(
         )
 
 
+# 📣 ntfy (https://ntfy.sh) — free push notifications, no account, no phone
+# number. Priorities are ntfy's own 1-5 scale (docs.ntfy.sh/publish/#message-priority):
+#   3 = default: short vibration and sound
+#   4 = high:    long vibration burst, sound, pop-over
+#   5 = max:     really long vibration bursts, sound, pop-over
+# Whether a priority can break through Do Not Disturb is a per-priority
+# setting the PERSON turns on in the ntfy Android app; we can't force it.
+NTFY_TIER_PRIORITY: dict[str, int] = {
+    "check_in": 3,
+    "concerned": 4,
+    "urgent": 4,
+    "emergency": 5,
+}
+
+# Tags that ntfy shows as emoji in front of the title.
+NTFY_TIER_TAGS: dict[str, list[str]] = {
+    "check_in": ["wave"],
+    "concerned": ["warning"],
+    "urgent": ["warning"],
+    "emergency": ["rotating_light"],
+}
+
+
+def ntfy_priority_for(contact: Contact, tier: str | None) -> int:
+    """Contact override wins (the self contact sets 5), else the tier's mapping."""
+    if contact.ntfy_priority is not None:
+        return contact.ntfy_priority
+    return NTFY_TIER_PRIORITY.get(tier or "", 3)
+
+
+def _ntfy_request(
+    config: NtfyConfig,
+    topic: str,
+    subject: str,
+    body: str,
+    contact: Contact,
+    tier: str | None,
+) -> tuple[str, dict[str, Any], dict[str, str]]:
+    """Build (url, json_payload, headers) for one ntfy publish.
+
+    We publish as JSON to the server ROOT, not with X-Title headers: titles
+    carry people's names, and non-ASCII in HTTP headers is exactly where
+    libraries garble things. JSON is plain UTF-8, no encoding tricks.
+
+    A topic written as a full URL ("https://ntfy.example.com/alex-x7f...")
+    uses that server for this one contact.
+    """
+    server = config.server
+    if topic.startswith(("http://", "https://")):
+        server, _, topic = topic.rstrip("/").rpartition("/")
+    payload: dict[str, Any] = {
+        "topic": topic,
+        "title": subject,
+        "message": body,
+        "priority": ntfy_priority_for(contact, tier),
+        "tags": NTFY_TIER_TAGS.get(tier or "", ["wave"]),
+    }
+    headers: dict[str, str] = {}
+    if config.token:
+        headers["Authorization"] = f"Bearer {config.token}"
+    elif config.username and config.password:
+        raw = f"{config.username}:{config.password}".encode("utf-8")
+        headers["Authorization"] = "Basic " + base64.b64encode(raw).decode("ascii")
+    return server.rstrip("/") + "/", payload, headers
+
+
+async def send_ntfy(
+    config: NtfyConfig,
+    topic: str,
+    subject: str,
+    body: str,
+    contact: Contact,
+    tier: str | None = None,
+) -> SendResult:
+    """Publish a push notification via ntfy."""
+    url, payload, headers = _ntfy_request(config, topic, subject, body, contact, tier)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers,
+                                    timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                if 200 <= resp.status < 300:
+                    logger.info(f"ntfy sent to {contact.name} ({contact.id}), priority {payload['priority']}")
+                    try:
+                        message_id = (await resp.json(content_type=None)).get("id")
+                    except Exception:
+                        message_id = None
+                    return SendResult(
+                        success=True,
+                        method="ntfy",
+                        contact_id=contact.id,
+                        contact_name=contact.name,
+                        details={"priority": payload["priority"], "http_status": resp.status,
+                                 "ntfy_message_id": message_id},
+                    )
+                text = (await resp.text())[:300]
+                logger.error(f"ntfy failed for {contact.name}: HTTP {resp.status} {text}")
+                return SendResult(
+                    success=False,
+                    method="ntfy",
+                    contact_id=contact.id,
+                    contact_name=contact.name,
+                    error=f"HTTP {resp.status}: {text}",
+                )
+    except Exception as e:
+        logger.error(f"Failed to send ntfy to {contact.name}: {e}")
+        return SendResult(
+            success=False,
+            method="ntfy",
+            contact_id=contact.id,
+            contact_name=contact.name,
+            error=str(e) or type(e).__name__,
+        )
+
+
 async def send_message(
     integrations: Integrations,
     contact: Contact,
     subject: str,
     body: str,
+    tier: str | None = None,
 ) -> SendResult:
     """Send a message to a contact using their preferred method.
 
@@ -191,7 +308,9 @@ async def send_message(
     code only fell back when an integration was missing: one SMTP hiccup
     and the emergency message just... didn't go anywhere else.)
     """
-    fallback_order = ["email", "telegram", "sms"]
+    # ntfy goes LAST so contacts set up before it existed behave exactly as
+    # before; a contact who prefers ntfy still gets it first.
+    fallback_order = ["email", "telegram", "sms", "ntfy"]
     order = [contact.preferred_method] + [m for m in fallback_order if m != contact.preferred_method]
 
     attempts: list[str] = []
@@ -211,6 +330,8 @@ async def send_message(
             result = await send_telegram(integration, addr, body, contact)
         elif method == "sms":
             result = await send_sms(integration, addr, body, contact)
+        elif method == "ntfy":
+            result = await send_ntfy(integration, addr, subject, body, contact, tier)
         else:  # unknown preferred_method string in config
             continue
 

@@ -12,12 +12,12 @@ Config-as-safety-net: "Configure while thinking clearly, so it's there when you'
 src/ai_off_ramp/
   config.py      - YAML config loader with env var resolution
   privacy.py     - CRITICAL: Topic detection + message filtering (defense in depth)
-  contacts.py    - Email (SMTP), Telegram, SMS (Twilio) send methods
+  contacts.py    - Email (SMTP), Telegram, SMS (Twilio), ntfy push; fallback across them
   templates.py   - Pronoun-aware message rendering with privacy integration
   pronouns.py    - Pronoun map shared by templates + privacy fallbacks
   audit.py       - JSONL audit trail
   server.py      - MCP server (8 tools, stdio + SSE)
-tests/           - 86 tests (2026-10-03), privacy suite is safety-critical
+tests/           - 105 tests (2026-10-03), privacy suite is safety-critical
 ```
 
 ## Running
