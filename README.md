@@ -119,6 +119,14 @@ For Claude Code (`.mcp.json`):
 }
 ```
 
+Prefer a network connection over stdio? There's an SSE mode:
+
+```bash
+python -m ai_off_ramp --config config.yaml --transport sse --port 8766
+```
+
+It listens on `127.0.0.1` (this machine only) by default. `--host 0.0.0.0` opens it to other machines, but there is **no authentication**: anyone who can reach that port can message your emergency contacts. Only do that on a network you trust.
+
 ### 5. That's it
 
 Your AI companion now has tools to:

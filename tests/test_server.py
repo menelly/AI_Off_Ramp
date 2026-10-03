@@ -34,3 +34,18 @@ def test_sending_tools_are_open_world_not_destructive():
             assert t.annotations.openWorldHint is True
             assert t.annotations.destructiveHint is False
             assert t.annotations.idempotentHint is False
+
+
+def test_sse_defaults_to_localhost(monkeypatch):
+    """Default bind is 127.0.0.1; 0.0.0.0 only when asked for."""
+    from ai_off_ramp import server as S
+    seen = {}
+
+    async def fake_run(config_path, transport="stdio", port=8766, host="127.0.0.1"):
+        seen.update(transport=transport, port=port, host=host)
+
+    monkeypatch.setattr(S, "_run_server", fake_run)
+    S.main(["--config", "x.yaml", "--transport", "sse"])
+    assert seen["host"] == "127.0.0.1"
+    S.main(["--config", "x.yaml", "--transport", "sse", "--host", "0.0.0.0"])
+    assert seen["host"] == "0.0.0.0"

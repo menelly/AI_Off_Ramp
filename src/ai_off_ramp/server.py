@@ -518,7 +518,8 @@ async def _do_escalation(
     }
 
 
-async def _run_server(config_path: str, transport: str = "stdio", port: int = 8766):
+async def _run_server(config_path: str, transport: str = "stdio", port: int = 8766,
+                      host: str = "127.0.0.1"):
     """Start the MCP server."""
     from mcp.server import Server
     from mcp.server.models import InitializationOptions
@@ -582,7 +583,12 @@ async def _run_server(config_path: str, transport: str = "stdio", port: int = 87
                 Mount("/messages/", app=sse.handle_post_message),
             ],
         )
-        uvi_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            logger.warning(
+                f"SSE listening on {host}:{port} with NO authentication. Anyone who can "
+                f"reach this port can send messages to your emergency contacts."
+            )
+        uvi_config = uvicorn.Config(app, host=host, port=port, log_level="info")
         uvi_server = uvicorn.Server(uvi_config)
         await uvi_server.serve()
 
@@ -608,11 +614,20 @@ def main(argv: list[str] | None = None) -> int:
         default=8766,
         help="Port for SSE transport (default: 8766)",
     )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help=(
+            "Address the SSE transport listens on (default: 127.0.0.1, this machine only). "
+            "Use 0.0.0.0 to accept connections from other machines: there is no "
+            "authentication, so only do that on a network you trust."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
     try:
-        asyncio.run(_run_server(args.config, args.transport, args.port))
+        asyncio.run(_run_server(args.config, args.transport, args.port, args.host))
     except KeyboardInterrupt:
         pass
     return 0

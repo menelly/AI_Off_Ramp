@@ -14,15 +14,17 @@ src/ai_off_ramp/
   privacy.py     - CRITICAL: Topic detection + message filtering (defense in depth)
   contacts.py    - Email (SMTP), Telegram, SMS (Twilio) send methods
   templates.py   - Pronoun-aware message rendering with privacy integration
+  pronouns.py    - Pronoun map shared by templates + privacy fallbacks
   audit.py       - JSONL audit trail
   server.py      - MCP server (8 tools, stdio + SSE)
-tests/           - 56 tests, privacy suite is safety-critical
+tests/           - 86 tests (2026-10-03), privacy suite is safety-critical
 ```
 
 ## Running
 ```bash
 python -m ai_off_ramp --config path/to/config.yaml
 python -m ai_off_ramp --config config.yaml --transport sse --port 8766
+# SSE binds 127.0.0.1 by default; --host 0.0.0.0 is an explicit opt-in (no auth!)
 ```
 
 ## Testing
